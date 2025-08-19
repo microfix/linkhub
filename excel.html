@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Excel Diff – SD+</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root{--bg:#0b0b0f;--card:#15151c;--ink:#fff;--muted:#9aa0a6;--accent1:#ff7a18;--accent2:#ff3ba7}
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial}
+    .wrap{max-width:1200px;margin:0 auto;padding:20px}
+    h1{margin:0 0 16px;font-weight:800;letter-spacing:.3px}
+    .sub{color:var(--muted);margin:6px 0 24px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .card{background:var(--card);border-radius:12px;padding:16px;border:1px solid #1e1e27}
+    .card h2{margin:0 0 12px;font-size:16px}
+    label{display:block;margin:10px 0 6px;color:var(--muted)}
+    input[type=file], select, button{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #2a2a33;background:#0f0f15;color:var(--ink)}
+    button{cursor:pointer;border:0;background:linear-gradient(90deg,var(--accent1),var(--accent2));font-weight:700}
+    button:disabled{opacity:.5;cursor:not-allowed;filter:grayscale(1)}
+    .row{display:flex;gap:12px;align-items:center}
+    .row > *{flex:1}
+    .opts{display:flex;flex-wrap:wrap;gap:12px;margin-top:10px}
+    .opts label{display:flex;align-items:center;gap:8px;margin:0;color:var(--ink)}
+    .badge{display:inline-block;padding:6px 10px;border-radius:999px;font-size:12px;background:#0f0f15;border:1px solid #2a2a33;color:var(--muted)}
+    .badges{display:flex;gap:8px;flex-wrap:wrap}
+    .accent{background:linear-gradient(90deg,var(--accent1),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    th,td{padding:8px 10px;border-bottom:1px solid #23232c;vertical-align:top;word-break:break-word}
+    th{position:sticky;top:0;background:#0f0f15;z-index:1}
+    tr.added{background:rgba(63, 213, 79,.08)}
+    tr.removed{background:rgba(255, 99, 71,.08)}
+    tr.changed{background:rgba(255, 215, 0,.10)}
+    .controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+    .controls button, .controls select, .controls input[type="search"]{flex:0 0 auto;width:auto}
+    .right{margin-left:auto}
+    .muted{color:var(--muted)}
+    .warn{background:#221600;border:1px solid #5c3b00;color:#ffd58a;padding:8px 10px;border-radius:8px;margin-top:10px}
+    .footer{opacity:.8;margin-top:24px;font-size:12px;color:var(--muted)}
+    @media (max-width:980px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Excel Diff <span class="accent">SD+</span></h1>
+    <p class="sub">Vælg to Excel-ark. App'en sammenligner alle celler (rækker og kolonner) og viser ændringer, tilføjelser og sletninger. Understøtter .xlsx, .xls og .csv.</p>
+
+    <div class="grid">
+      <div class="card" id="panelA">
+        <h2>Fil A (før)</h2>
+        <input type="file" id="fileA" accept=".xlsx,.xls,.csv" />
+        <label for="sheetA">Ark i fil A</label>
+        <select id="sheetA"></select>
+        <div class="badges" id="metaA"></div>
+      </div>
+      <div class="card" id="panelB">
+        <h2>Fil B (efter)</h2>
+        <input type="file" id="fileB" accept=".xlsx,.xls,.csv" />
+        <label for="sheetB">Ark i fil B</label>
+        <select id="sheetB"></select>
+        <div class="badges" id="metaB"></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h2>Sammenlign</h2>
+      <div class="row">
+        <div class="opts">
+          <label><input type="checkbox" id="ignoreWhitespace" checked> Ignorér foranstillet/efterstillet mellemrum</label>
+          <label><input type="checkbox" id="ignoreCase"> Ignorér store/små bogstaver</label>
+          <label><input type="checkbox" id="onlyChanges" checked> Vis kun ændringer</label>
+          <label><input type="checkbox" id="useKey" checked> Match rækker på nøglekolonne</label>
+          <label class="badge">Nøgle A: 
+            <select id="keyColA" style="min-width:80px"></select>
+          </label>
+          <label class="badge">Nøgle B: 
+            <select id="keyColB" style="min-width:80px"></select>
+          </label>
+          <label><input type="checkbox" id="headerRow" checked> Første række er overskrifter</label>
+        </div>
+        <button id="btnCompare" class="right" disabled>Sammenlign A → B</button>
+      </div>
+      <div class="controls">
+        <input type="search" id="searchBox" placeholder="Søg i resultater…" />
+        <select id="filterType">
+          <option value="all">Alle</option>
+          <option value="changed">Ændret</option>
+          <option value="added">Tilføjet</option>
+          <option value="removed">Slettet</option>
+        </select>
+        <select id="pageSize">
+          <option>200</option>
+          <option selected>500</option>
+          <option>1000</option>
+        </select>
+        <button id="btnPrev">◀ Forrige</button>
+        <span id="pageInfo" class="muted">Side 1/1</span>
+        <button id="btnNext">Næste ▶</button>
+        <button id="btnExport" class="right" disabled>Download CSV</button>
+      </div>
+      <div id="summary" class="badges" style="margin-top:8px"></div>
+      <div id="alerts"></div>
+      <div style="overflow:auto;max-height:60vh;border:1px solid #23232c;border-radius:8px;margin-top:12px">
+        <table id="result">
+          <thead>
+            <tr>
+              <th style="width:90px">Række A</th>
+              <th style="width:90px">Række B</th>
+              <th style="width:90px">Kolonne</th>
+              <th style="width:110px">Celle A</th>
+              <th style="width:110px">Celle B</th>
+              <th>Værdi A</th>
+              <th>Værdi B</th>
+              <th style="width:120px">Status</th>
+              <th>Diff</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <p class="footer">Tip: Hvis dit ark er enormt, så brug "Download CSV" og arbejd i et regneark for fuldt overblik.</p>
+  </div>
+
+<script>
+(function(){
+  // State
+  let bookA=null, bookB=null, arrA=null, arrB=null;
+  let diffs=[]; // {row,col,cell,a,b,type}
+  let filtered=[]; // after search/filter
+  let curPage=1, pageSize=500;
+  let headersA=[], headersB=[]; // optional header names when headerRow is on
+
+  // Helpers
+  const $=s=>document.querySelector(s);
+  const $$=s=>document.querySelectorAll(s);
+
+  function warn(msg){
+    const el = document.getElementById('alerts');
+    if(el) el.innerHTML = `<div class="warn">${msg}</div>`;
+  }
+  function clearWarn(){
+    const el = document.getElementById('alerts');
+    if(el) el.innerHTML = '';
+  }
+
+  function numToCol(n){ // 0-index -> Excel letters
+    let s=""; n = n + 1;
+    while(n>0){let m=(n-1)%26; s=String.fromCharCode(65+m)+s; n=Math.floor((n-1)/26);} return s;
+  }
+  function maxCols(arr){return arr.reduce((m,r)=>Math.max(m,(r?r.length:0)),0)}
+  function normalize(v,{trim,lower}){
+    if(v==null) return "";
+    let s=(typeof v==='number')? String(v) : String(v);
+    if(trim) s=s.trim();
+    if(lower) s=s.toLowerCase();
+    return s;
+  }
+  function populateKeySelects(){
+    const colsA = arrA? maxCols(arrA): 0;
+    const colsB = arrB? maxCols(arrB): 0;
+    const aSel = $('#keyColA');
+    const bSel = $('#keyColB');
+    if(aSel){ aSel.innerHTML=''; for(let i=0;i<colsA;i++){ const o=document.createElement('option'); o.value=i; o.textContent=numToCol(i); if(i===0) o.selected=true; aSel.appendChild(o);} }
+    if(bSel){ bSel.innerHTML=''; for(let i=0;i<colsB;i++){ const o=document.createElement('option'); o.value=i; o.textContent=numToCol(i); if(i===0) o.selected=true; bSel.appendChild(o);} }
+  }
+
+  function renderSheetMeta(container, arr){
+    if(!arr) {container.innerHTML="";return}
+    const rows=arr.length, cols=maxCols(arr);
+    container.innerHTML = `
+      <span class="badge">Rækker: <strong>${rows.toLocaleString()}</strong></span>
+      <span class="badge">Kolonner: <strong>${cols.toLocaleString()}</strong></span>
+      <span class="badge">Celler: <strong>${(rows*cols).toLocaleString()}</strong></span>
+    `;
+  }
+
+  function enableCompareIfReady(){
+    const ok = bookA && bookB && $('#sheetA').value && $('#sheetB').value;
+    $('#btnCompare').disabled = !ok;
+  }
+
+  async function readFile(file){
+    const data = await file.arrayBuffer();
+    const wb = XLSX.read(data, {type:'array'});
+    return wb;
+  }
+
+  function sheetToArray(wb, sheetName){
+    const ws = wb.Sheets[sheetName];
+    if(!ws) return null;
+    // header:1 gives 2D array preserving positions, raw keeps numbers
+    return XLSX.utils.sheet_to_json(ws, {header:1, raw:true, blankrows:false});
+  }
+
+  function populateSheets(select, wb){
+    select.innerHTML = '';
+    wb.SheetNames.forEach((n,i)=>{
+      const opt=document.createElement('option');
+      opt.value=n; opt.textContent=n + (i===0?" (første)":"");
+      select.appendChild(opt);
+    });
+  }
+
+  // File inputs
+  $('#fileA').addEventListener('change', async (e)=>{
+    const f=e.target.files[0]; if(!f) return;
+    bookA = await readFile(f);
+    populateSheets($('#sheetA'), bookA);
+    arrA = sheetToArray(bookA, bookA.SheetNames[0]);
+    renderSheetMeta($('#metaA'), arrA);
+    populateKeySelects();
+    headersA = arrA? (arrA[0]||[]):[];
+    enableCompareIfReady();
+  });
+  $('#fileB').addEventListener('change', async (e)=>{
+    const f=e.target.files[0]; if(!f) return;
+    bookB = await readFile(f);
+    populateSheets($('#sheetB'), bookB);
+    arrB = sheetToArray(bookB, bookB.SheetNames[0]);
+    renderSheetMeta($('#metaB'), arrB);
+    populateKeySelects();
+    headersB = arrB? (arrB[0]||[]):[];
+    enableCompareIfReady();
+  });
+
+  // Sheet selects
+  $('#sheetA').addEventListener('change', ()=>{
+    if(bookA){arrA = sheetToArray(bookA, $('#sheetA').value); renderSheetMeta($('#metaA'), arrA); populateKeySelects(); headersA = arrA? (arrA[0]||[]):[];}
+    enableCompareIfReady();
+  });
+  $('#sheetB').addEventListener('change', ()=>{
+    if(bookB){arrB = sheetToArray(bookB, $('#sheetB').value); renderSheetMeta($('#metaB'), arrB); populateKeySelects(); headersB = arrB? (arrB[0]||[]):[];}
+    enableCompareIfReady();
+  });
+
+  function comparePositionBased(opts){
+    const rows=Math.max(arrA.length, arrB.length);
+    const cols=Math.max(maxCols(arrA), maxCols(arrB));
+    const out=[];
+    for(let r=0;r<rows;r++){
+      const rowA = arrA[r]||[];
+      const rowB = arrB[r]||[];
+      for(let c=0;c<cols;c++){
+        const aDisp = rowA[c]==null? '' : rowA[c];
+        const bDisp = rowB[c]==null? '' : rowB[c];
+        const aNorm = normalize(aDisp, opts);
+        const bNorm = normalize(bDisp, opts);
+        if(aNorm===bNorm){
+          if(!$('#onlyChanges').checked) out.push({rowA:r+1,rowB:r+1,col:c,cellA:numToCol(c)+(r+1),cellB:numToCol(c)+(r+1),a:aDisp,b:bDisp,type:'unchanged'});
+        } else {
+          let type;
+          if(aNorm==='' && bNorm!=='') type='added';
+          else if(aNorm!=='' && bNorm==='') type='removed';
+          else type='changed';
+          out.push({rowA:r+1,rowB:r+1,col:c,cellA:numToCol(c)+(r+1),cellB:numToCol(c)+(r+1),a:aDisp,b:bDisp,type});
+        }
+      }
+    }
+    diffs=out;
+    applyFilterAndRender();
+  }
+
+  function compare(){
+    if(!arrA||!arrB) return;
+    clearWarn();
+    const opts={trim:$('#ignoreWhitespace').checked, lower:$('#ignoreCase').checked};
+    const useKey=$('#useKey').checked;
+    const headerOn=$('#headerRow').checked;
+    const keyA=parseInt($('#keyColA').value||'0',10);
+    const keyB=parseInt($('#keyColB').value||'0',10);
+
+    // Prepare working arrays (optionally skip header row)
+    const startRow = headerOn? 1 : 0;
+    const workA = arrA.slice(startRow);
+    const workB = arrB.slice(startRow);
+
+    headersA = headerOn? (arrA[0]||[]) : [];
+    headersB = headerOn? (arrB[0]||[]) : [];
+
+    const out=[];
+
+    if(useKey){
+      // Build multi-maps from key -> [{rowIndex, rowArray}, ...], and collect rows with empty key
+      const mapA=new Map();
+      const noKeyA=[]; // {rowIndex,row}
+      for(let i=0;i<workA.length;i++){
+        const kVal=(workA[i]||[])[keyA];
+        const key = normalize(kVal, opts);
+        if(key!==''){
+          const list = mapA.get(key) || [];
+          list.push({rowIndex:i+startRow, row:workA[i]||[]});
+          mapA.set(key, list);
+        } else noKeyA.push({rowIndex:i+startRow, row:workA[i]||[]});
+      }
+      const mapB=new Map();
+      const noKeyB=[]; // {rowIndex,row}
+      for(let i=0;i<workB.length;i++){
+        const kVal=(workB[i]||[])[keyB];
+        const key = normalize(kVal, opts);
+        if(key!==''){
+          const list = mapB.get(key) || [];
+          list.push({rowIndex:i+startRow, row:workB[i]||[]});
+          mapB.set(key, list);
+        } else noKeyB.push({rowIndex:i+startRow, row:workB[i]||[]});
+      }
+
+      if(mapA.size===0 && mapB.size===0){
+        warn('Nøglen gav ingen match i hverken Fil A eller Fil B. Faldt tilbage til positions-sammenligning.');
+        return comparePositionBased(opts); // use helper that renders
+      }
+
+      // Union of keys
+      const allKeys=new Set([...mapA.keys(), ...mapB.keys()]);
+      // Determine max columns across both for complete diff including extras
+      const cols=Math.max(maxCols(arrA), maxCols(arrB));
+
+      for(const k of allKeys){
+        const listA = mapA.get(k) || [];
+        const listB = mapB.get(k) || [];
+        const pairs = Math.max(listA.length, listB.length);
+        for(let p=0;p<pairs;p++){
+          const aRec = listA[p] || null;
+          const bRec = listB[p] || null;
+          const rowA = aRec? aRec.row : [];
+          const rowB = bRec? bRec.row : [];
+          const idxA = aRec? aRec.rowIndex : null; // 0-based index in original sheet
+          const idxB = bRec? bRec.rowIndex : null;
+          for(let c=0;c<cols;c++){
+            const aDisp = rowA[c]==null? '' : rowA[c];
+            const bDisp = rowB[c]==null? '' : rowB[c];
+            const aNorm = normalize(aDisp, opts);
+            const bNorm = normalize(bDisp, opts);
+            if(aNorm===bNorm){
+              if(!$('#onlyChanges').checked){
+                out.push({rowA: idxA!=null? (idxA+1):'', rowB: idxB!=null? (idxB+1):'', col:c, cellA: (idxA!=null? (numToCol(c)+(idxA+1)) : ''), cellB: (idxB!=null? (numToCol(c)+(idxB+1)) : ''), a:aDisp, b:bDisp, type:'unchanged'});
+              }
+            } else {
+              let type;
+              if(aNorm==='' && bNorm!=='') type='added';
+              else if(aNorm!=='' && bNorm==='') type='removed';
+              else type='changed';
+              out.push({rowA: idxA!=null? (idxA+1):'', rowB: idxB!=null? (idxB+1):'', col:c, cellA: (idxA!=null? (numToCol(c)+(idxA+1)) : ''), cellB: (idxB!=null? (numToCol(c)+(idxB+1)) : ''), a:aDisp, b:bDisp, type});
+            }
+          }
+        }
+      }
+      // Also include rows with empty key values as added/removed against an empty counterpart
+      if(noKeyA.length || noKeyB.length){
+        const emptyRow=[];
+        // A-only (no key): treat as removed vs empty in B
+        for(const rec of noKeyA){
+          for(let c=0;c<cols;c++){
+            const aDisp = rec.row[c]==null? '' : rec.row[c];
+            const bDisp = '';
+            const aNorm = normalize(aDisp, opts);
+            const bNorm = '';
+            if(aNorm===bNorm){
+              if(!$('#onlyChanges').checked){
+                out.push({rowA: rec.rowIndex+1, rowB: '', col:c, cellA: numToCol(c)+(rec.rowIndex+1), cellB: '', a:aDisp, b:bDisp, type:'unchanged'});
+              }
+            } else {
+              const type = aNorm!=='' && bNorm==='' ? 'removed' : 'changed';
+              out.push({rowA: rec.rowIndex+1, rowB: '', col:c, cellA: numToCol(c)+(rec.rowIndex+1), cellB: '', a:aDisp, b:bDisp, type});
+            }
+          }
+        }
+        // B-only (no key): treat as added vs empty in A
+        for(const rec of noKeyB){
+          for(let c=0;c<cols;c++){
+            const aDisp = '';
+            const bDisp = rec.row[c]==null? '' : rec.row[c];
+            const aNorm = '';
+            const bNorm = normalize(bDisp, opts);
+            if(aNorm===bNorm){
+              if(!$('#onlyChanges').checked){
+                out.push({rowA: '', rowB: rec.rowIndex+1, col:c, cellA: '', cellB: numToCol(c)+(rec.rowIndex+1), a:aDisp, b:bDisp, type:'unchanged'});
+              }
+            } else {
+              const type = aNorm==='' && bNorm!=='' ? 'added' : 'changed';
+              out.push({rowA: '', rowB: rec.rowIndex+1, col:c, cellA: '', cellB: numToCol(c)+(rec.rowIndex+1), a:aDisp, b:bDisp, type});
+            }
+          }
+        }
+        // Warn user that some rows lacked keys
+        if(noKeyA.length || noKeyB.length){
+          warn(`Bemærk: ${noKeyA.length} rækker i A og ${noKeyB.length} rækker i B havde tom nøgle og blev sammenlignet positionelt som tilføjelser/sletninger. Overvej at vælge en nøglekolonne uden tomme værdier eller slå 'Match rækker på nøglekolonne' fra.`);
+        }
+      }
+      diffs=out;
+      if(useKey && (!diffs || diffs.length===0)){
+        warn('Ingen resultater fundet med nøgle-match. Faldt tilbage til positions-sammenligning.');
+        return comparePositionBased(opts);
+      }
+      applyFilterAndRender();
+    } else {
+      return comparePositionBased(opts);
+    }
+  }
+
+  function applyFilterAndRender(){
+    const q = $('#searchBox').value.trim().toLowerCase();
+    const t = $('#filterType').value;
+    const list = diffs.filter(d=>{
+      if(t!=='all' && d.type!==t) return false;
+      if(!q) return true;
+      return String(d.a).toLowerCase().includes(q) || String(d.b).toLowerCase().includes(q) || d.cellA.toLowerCase().includes(q) || d.cellB.toLowerCase().includes(q);
+    });
+    filtered=list;
+    curPage=1;
+    renderSummary();
+    renderPage();
+    $('#btnExport').disabled = filtered.length===0;
+  }
+
+  function renderSummary(){
+    const total=diffs.length;
+    const changed=diffs.filter(d=>d.type==='changed').length;
+    const added=diffs.filter(d=>d.type==='added').length;
+    const removed=diffs.filter(d=>d.type==='removed').length;
+    const unchanged=diffs.filter(d=>d.type==='unchanged').length;
+    $('#summary').innerHTML = `
+      <span class="badge">Alle: <strong>${total.toLocaleString()}</strong></span>
+      <span class="badge">Ændret: <strong>${changed.toLocaleString()}</strong></span>
+      <span class="badge">Tilføjet: <strong>${added.toLocaleString()}</strong></span>
+      <span class="badge">Slettet: <strong>${removed.toLocaleString()}</strong></span>
+      <span class="badge">Uændret: <strong>${unchanged.toLocaleString()}</strong></span>
+    `;
+  }
+
+  function renderPage(){
+    pageSize = parseInt($('#pageSize').value,10)||500;
+    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+    if(curPage>totalPages) curPage=totalPages;
+    const start=(curPage-1)*pageSize;
+    const slice=filtered.slice(start,start+pageSize);
+    $('#pageInfo').textContent = `Side ${curPage}/${totalPages} – viser ${slice.length.toLocaleString()} af ${filtered.length.toLocaleString()}`;
+
+    const tbody=$('#result tbody');
+    let html='';
+    for(const d of slice){
+      const pos = (d.cellB||d.cellA||'');
+      const diffTxt = `${pos} a=${String(d.a==null?'':d.a)} b=${String(d.b==null?'':d.b)}`;
+      html+=`<tr class="${d.type}">\n`+
+            `<td>${d.rowA||''}</td>`+
+            `<td>${d.rowB||''}</td>`+
+            `<td>${numToCol(d.col)}</td>`+
+            `<td>${d.cellA||''}</td>`+
+            `<td>${d.cellB||''}</td>`+
+            `<td>${escapeHtml(d.a)}</td>`+
+            `<td>${escapeHtml(d.b)}</td>`+
+            `<td>${label(d.type)}</td>`+
+            `<td>${escapeHtml(diffTxt)}</td>`+
+            `</tr>`;
+    }
+    tbody.innerHTML=html;
+  }
+
+  function label(t){
+    if(t==='changed') return 'Ændret';
+    if(t==='added') return 'Tilføjet';
+    if(t==='removed') return 'Slettet';
+    return 'Uændret';
+  }
+
+  function escapeHtml(v){
+    if(v==null) return '';
+    const s = String(v);
+    // Use regex replaces for broad browser compatibility (avoid String.replaceAll)
+    return s
+      .replace(/&/g,'&amp;')
+      .replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;');
+  }
+
+  // Events
+  $('#btnCompare').addEventListener('click', ()=>{
+    compare();
+  });
+  $('#onlyChanges').addEventListener('change', ()=>{
+    if(diffs.length){applyFilterAndRender();}
+  });
+  $('#ignoreWhitespace').addEventListener('change', ()=>{
+    if(arrA&&arrB){compare();}
+  });
+  $('#ignoreCase').addEventListener('change', ()=>{
+    if(arrA&&arrB){compare();}
+  });
+  $('#searchBox').addEventListener('input', ()=>{ if(diffs.length) applyFilterAndRender(); });
+  $('#filterType').addEventListener('change', ()=>{ if(diffs.length) applyFilterAndRender(); });
+  $('#pageSize').addEventListener('change', ()=>{ if(diffs.length) renderPage(); });
+  $('#btnPrev').addEventListener('click', ()=>{ if(curPage>1){curPage--; renderPage();} });
+  $('#btnNext').addEventListener('click', ()=>{ const totalPages=Math.max(1,Math.ceil(filtered.length/pageSize)); if(curPage<totalPages){curPage++; renderPage();} });
+
+  $('#btnExport').addEventListener('click', ()=>{
+    if(!filtered.length) return;
+    const rows=[["row_a","row_b","column","cell_a","cell_b","value_a","value_b","status"]];
+    for(const d of filtered){
+      rows.push([d.rowA||'', d.rowB||'', numToCol(d.col), d.cellA||'', d.cellB||'', String(d.a??''), String(d.b??''), label(d.type)]);
+    }
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'diff');
+    const out = XLSX.write(wb, {bookType:'csv', type:'array'});
+    const blob = new Blob([out], {type:'text/csv;charset=utf-8;'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');
+    a.href=url; a.download='excel-diff.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  });
+  $('#useKey').addEventListener('change', ()=>{ clearWarn(); });
+
+})();
+</script>
+</body>
+</html>

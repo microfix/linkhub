@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SD+ LinkHub</title>
+  <style>
+    :root{
+      --bg:#0b0c10;
+      --panel:#111319;
+      --panel-2:#0e1016;
+      --muted:#a8b0bf;
+      --fg:#ffffff;
+      --accent1:#ff7a18;  /* orange */
+      --accent2:#ff3d81;  /* pink */
+      --ok:#22c55e;
+      --warn:#f59e0b;
+      --err:#ef4444;
+      --shadow:0 10px 30px rgba(0,0,0,.45);
+      --radius:18px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;background:linear-gradient(120deg,#090a0f 0%, #0b0c11 65%, #0d0f16 100%);
+      color:var(--fg);
+      font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Inter,Arial,sans-serif;
+      overflow:hidden;
+    }
+    .app{display:flex; height:100vh; width:100vw;}
+
+    /* Sidebar */
+    .sidebar{
+      width:300px; min-width:260px; max-width:380px;
+      background:linear-gradient(180deg, #0c0e14, #0a0b10);
+      border-right:1px solid rgba(255,255,255,.06);
+      box-shadow:var(--shadow);
+      display:flex; flex-direction:column;
+    }
+    .brand{
+      display:flex; align-items:center; gap:12px;
+      padding:18px 16px 14px 16px; border-bottom:1px solid rgba(255,255,255,.06);
+    }
+    .sd-logo{
+      width:54px;
+      height:54px;
+      display:block;
+      object-fit:contain;
+    }
+    .title-wrap{display:flex; flex-direction:column}
+    .app-title{font-weight:800; font-size:18px; letter-spacing:.3px}
+    .app-sub{color:var(--muted); font-size:12px}
+
+    .tools{display:flex; gap:8px; padding:12px 16px; border-bottom:1px solid rgba(255,255,255,.06)}
+    .tools button, .tools label.btn{
+      border:1px solid rgba(255,255,255,.08); background:#0e1118; color:#fff;
+      padding:8px 10px; border-radius:12px; cursor:pointer; transition:.15s ease; font-weight:600;
+    }
+    .tools button:hover, .tools label.btn:hover{transform:translateY(-1px); border-color:rgba(255,255,255,.18)}
+    .tools input[type=file]{display:none}
+
+    .editor{padding:12px 16px; display:grid; gap:10px}
+    .row{display:grid; grid-template-columns:1fr 1.2fr auto; gap:8px}
+    .row input{
+      background:#0f1219; border:1px solid rgba(255,255,255,.08); color:#fff; padding:10px 12px; border-radius:12px;
+      outline:none; transition:.15s; min-width:0;
+    }
+    .row input:focus{border-color:rgba(255,255,255,.18)}
+    .addBtn{background:linear-gradient(135deg,var(--accent1),var(--accent2)); border:none; font-weight:800}
+
+    .search{padding:0 16px 10px 16px}
+    .search input{width:100%; background:#0f1219; border:1px solid rgba(255,255,255,.08); color:#fff; padding:10px 12px; border-radius:12px}
+
+    .list{overflow:auto; padding:8px 8px 18px 8px}
+    .link-item{
+      border:1px solid rgba(255,255,255,.08); background:linear-gradient(180deg,#0f1117,#0c0e13);
+      border-radius:14px; padding:10px 12px; margin:8px; display:flex; align-items:center; gap:10px; cursor:pointer;
+    }
+    .link-item.active{border-color:transparent; background:linear-gradient(135deg, rgba(255,122,24,.18), rgba(255,61,129,.18));}
+    .link-name{font-weight:700}
+    .link-url{color:var(--muted); font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+    .grow{flex:1 1 auto; min-width:0}
+    .item-actions{display:flex; gap:6px}
+    .item-actions button{
+      background:#0f1219; border:1px solid rgba(255,255,255,.08); color:#fff; padding:6px 8px; border-radius:10px; cursor:pointer;
+    }
+
+    /* Main */
+    .main{flex:1 1 auto; display:flex; flex-direction:column; min-width:0}
+    .bar{
+      display:flex; align-items:center; gap:8px; padding:10px; border-bottom:1px solid rgba(255,255,255,.06);
+      background:linear-gradient(180deg,#0f1217,#0d0f15);
+    }
+    .bar .pill{border:1px solid rgba(255,255,255,.08); background:#0e1118; color:#fff; padding:8px 10px; border-radius:12px; font-weight:600}
+    .urlbox{flex:1 1 auto; min-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; opacity:.9}
+    .warnnote{margin-left:auto; font-size:12px; color:var(--muted)}
+
+    .stage{position:relative; flex:1 1 auto; min-height:0}
+    iframe#view{position:absolute; inset:0; width:100%; height:100%; border:0; background:#0b0c10}
+    .overlay{
+      position:absolute; inset:0; display:grid; place-items:center; pointer-events:none;
+      background:linear-gradient(180deg,rgba(0,0,0,.15),rgba(0,0,0,.25)); opacity:0; transition:.2s;
+    }
+    .overlay.show{opacity:1}
+    .overlay .card{
+      pointer-events:auto; background:#0d0f15; border:1px solid rgba(255,255,255,.08); padding:20px; border-radius:16px; max-width:700px; text-align:center; box-shadow:var(--shadow);
+    }
+    .overlay .card h3{margin:0 0 10px 0}
+    .overlay .card p{margin:0 0 14px 0; color:var(--muted)}
+    .accent{background:linear-gradient(135deg,var(--accent1),var(--accent2)); -webkit-background-clip:text; background-clip:text; color:transparent; font-weight:900}
+
+    .footer{padding:8px 12px; font-size:12px; color:var(--muted); border-top:1px solid rgba(255,255,255,.06); background:#0b0c10}
+
+    @media (max-width: 880px){
+      .sidebar{width:240px}
+      .row{grid-template-columns:1fr 1fr auto}
+      .brand{padding:14px 12px}
+      .tools{padding:10px 12px}
+      .editor{padding:10px 12px}
+      .list{padding:6px}
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="brand">
+        <img class="sd-logo" src="https://www.sdplus.dk/wp-content/uploads/2024/11/SD_BLACK.svg" alt="SD+ Logo" />
+        <div class="title-wrap">
+          <div class="app-title">LinkHub</div>
+          <div class="app-sub">Hurtig adgang • SD+</div>
+        </div>
+      </div>
+
+      <div class="tools">
+        <button id="exportBtn" title="Eksporter links til JSON">Eksporter</button>
+        <label class="btn" for="importFile" title="Importer links fra JSON">Importer</label>
+        <input id="importFile" type="file" accept="application/json" />
+      </div>
+
+      <div class="editor">
+        <div class="row">
+          <input id="nameInput" placeholder="Navn" aria-label="Navn" />
+          <input id="urlInput" placeholder="Adresse (https://...)" aria-label="Adresse" />
+          <button class="addBtn" id="addBtn">Tilføj</button>
+        </div>
+      </div>
+
+      <div class="search">
+        <input id="searchInput" placeholder="Søg" aria-label="Søg" />
+      </div>
+
+      <div id="list" class="list" aria-label="Links"></div>
+
+      <div class="footer">Loader fra link.json/links.json hvis den findes • Ellers gemmes lokalt i browseren • Import/eksport ovenfor</div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+      <div class="bar">
+        <span class="pill" id="activeName">—</span>
+        <div class="urlbox" id="activeUrl">Vælg et link i venstre side</div>
+        <button class="pill" id="reloadBtn" title="Genindlæs visning">Genindlæs</button>
+        <a class="pill" id="openBtn" href="#" target="_blank" rel="noopener">Åbn i ny fane</a>
+        <span class="warnnote">Nogle sider afviser indlejring</span>
+      </div>
+      <div id="protoWarning" style="display:none; padding:8px 12px; font-size:12px; color:#ffd38a; border-bottom:1px solid rgba(255,255,255,.08); background:#14151b">
+        Kører fra <code>file://</code>. Browseren blokerer fetch af <code>link.json</code>. Start en lokal webserver (fx <code>python3 -m http.server 8080</code>) eller host via http/https.
+      </div>
+      <div class="stage">
+        <iframe id="view" referrerpolicy="no-referrer-when-downgrade"></iframe>
+        <div class="overlay" id="overlay">
+          <div class="card">
+            <h3>Indhold ikke synligt?</h3>
+            <p>Nogle sider afviser iFrame via X-Frame-Options/CSP. Brug knappen <span class="accent">Åbn i ny fane</span>.</p>
+            <div style="display:flex; gap:10px; justify-content:center; margin-top:8px">
+              <a class="pill" id="openFromOverlay" href="#" target="_blank" rel="noopener">Åbn i ny fane</a>
+              <button class="pill" id="closeOverlay">Skjul</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    // Storage helpers
+    const KEY = 'sdplus_links_v1';
+
+    /** @type {{name:string,url:string}[]} */
+    let links = [];
+    let filtered = [];
+    let activeIndex = -1;
+
+    function normalize(url){
+      if(!url) return url;
+      // Already absolute (has a scheme)
+      if(/^[a-z][a-z0-9+.-]*:\/\//i.test(url)) return url;
+      // Relative paths should pass through unchanged so they resolve against current origin
+      if(url.startsWith('/') || url.startsWith('./') || url.startsWith('../') || /\.html?(\?|#|$)/i.test(url)){
+        return url;
+      }
+      // Looks like a bare domain (example.com or sub.example.com[:port][...]) -> assume https
+      if(/^[\w.-]+\.[a-z]{2,}(?::\d+)?(\/|$)/i.test(url)) return 'https://' + url;
+      // Fallback: leave as-is
+      return url;
+    }
+
+    async function tryFetchLinksJson(){
+      if (location.protocol === 'file:') {
+        const warn = document.getElementById('protoWarning');
+        if (warn) warn.style.display = 'block';
+        throw new Error('Running from file:// — cannot fetch link.json due to CORS');
+      }
+      const candidates = ['link.json', 'links.json'];
+      let lastErr;
+      for(const name of candidates){
+        try{
+          const res = await fetch(name, { cache: 'no-store' });
+          if(!res.ok) throw new Error(name + ' not ok: ' + res.status);
+          const json = await res.json();
+          const arr = Array.isArray(json) ? json : json.links;
+          if(!Array.isArray(arr)) throw new Error(name + ' invalid shape (need array or {links:[]})');
+          const cleaned = arr
+            .filter(x => x && typeof x.name === 'string' && typeof x.url === 'string')
+            .map(x => ({ name: x.name.trim(), url: normalize(x.url.trim()) }))
+            .filter(x => x.name && x.url);
+          if(!cleaned.length) throw new Error(name + ' contained no valid items');
+          console.info('[SD+ LinkHub] Loaded links from', name);
+          return cleaned;
+        }catch(e){
+          lastErr = e;
+          // continue to next candidate
+        }
+      }
+      const err = lastErr || new Error('No link file found');
+      console.warn('[SD+ LinkHub] Could not load link.json/links.json:', err);
+      throw err;
+    }
+
+    async function load(){
+      // Priority: link.json/links.json > localStorage > default
+      try{
+        links = await tryFetchLinksJson();
+        // Do NOT overwrite localStorage automatically when reading file-based config
+      }catch(e){
+        // Fald tilbage til localStorage hvis ingen link.json/links.json
+        try{
+          const raw = localStorage.getItem(KEY);
+          if(raw){
+            const parsed = JSON.parse(raw);
+            if(Array.isArray(parsed)) links = parsed;
+            else if(Array.isArray(parsed.links)) links = parsed.links;
+          } else {
+            console.info('[SD+ LinkHub] No link.json/links.json and no localStorage — using default seed');
+          }
+        }catch(parseErr){
+          console.warn('[SD+ LinkHub] Failed to read localStorage:', parseErr);
+        }
+        if(!Array.isArray(links) || !links.length){
+          links = [{ name:'Permit', url:'https://pmit.microfix.dk' }];
+        }
+      }
+      filtered = links.slice();
+    }
+
+    function save(){
+      localStorage.setItem(KEY, JSON.stringify(links));
+    }
+
+    // UI bindings
+    const listEl = document.getElementById('list');
+    const nameInput = document.getElementById('nameInput');
+    const urlInput = document.getElementById('urlInput');
+    const addBtn = document.getElementById('addBtn');
+    const searchInput = document.getElementById('searchInput');
+    const activeName = document.getElementById('activeName');
+    const activeUrl = document.getElementById('activeUrl');
+    const view = document.getElementById('view');
+    const overlay = document.getElementById('overlay');
+    const openBtn = document.getElementById('openBtn');
+    const openFromOverlay = document.getElementById('openFromOverlay');
+    const reloadBtn = document.getElementById('reloadBtn');
+
+    function render(){
+      const q = searchInput.value.trim().toLowerCase();
+      filtered = links.filter(l => !q || l.name.toLowerCase().includes(q) || l.url.toLowerCase().includes(q));
+      listEl.innerHTML = '';
+      filtered.forEach((l, idx) => {
+        const realIndex = links.indexOf(l);
+        const item = document.createElement('div');
+        item.className = 'link-item' + (realIndex === activeIndex ? ' active' : '');
+        item.innerHTML = `
+          <div class="grow">
+            <div class="link-name">${escapeHtml(l.name)}</div>
+            <div class="link-url">${escapeHtml(l.url)}</div>
+          </div>
+          <div class="item-actions">
+            <button title="Redigér" data-act="edit">✎</button>
+            <button title="Slet" data-act="del">🗑️</button>
+          </div>
+        `;
+        item.addEventListener('click', (ev)=>{
+          const act = ev.target.getAttribute('data-act');
+          if(act === 'edit'){ ev.stopPropagation(); editLink(realIndex); return; }
+          if(act === 'del'){ ev.stopPropagation(); delLink(realIndex); return; }
+          select(realIndex);
+        });
+        listEl.appendChild(item);
+      });
+    }
+
+    function select(index){
+      if(index < 0 || index >= links.length) return;
+      activeIndex = index;
+      const l = links[index];
+      activeName.textContent = l.name || '—';
+      activeUrl.textContent = l.url || '';
+      openBtn.href = l.url;
+      openFromOverlay.href = l.url;
+      showOverlay(true); // vis hint under indlæsning
+      // Indlæs
+      try{
+        view.src = l.url;
+      }catch(e){ /* ignore */ }
+      render();
+    }
+
+    function add(){
+      const name = nameInput.value.trim();
+      let url = urlInput.value.trim();
+      if(!name || !url) return;
+      url = normalize(url);
+      links.push({name, url});
+      save();
+      nameInput.value = '';
+      urlInput.value = '';
+      render();
+    }
+
+    function editLink(i){
+      const l = links[i];
+      nameInput.value = l.name; urlInput.value = l.url;
+      // erstat ved næste tryk på Tilføj
+      addBtn.textContent = 'Opdatér';
+      addBtn.onclick = () => {
+        const name = nameInput.value.trim();
+        let url = normalize(urlInput.value.trim());
+        if(!name || !url) { resetAdd(); return; }
+        links[i] = {name, url}; save(); render(); resetAdd();
+      };
+    }
+    function resetAdd(){ addBtn.textContent = 'Tilføj'; addBtn.onclick = add; nameInput.value=''; urlInput.value=''; }
+
+    function delLink(i){
+      if(i === activeIndex){ activeIndex = -1; activeName.textContent='—'; activeUrl.textContent=''; view.removeAttribute('src'); }
+      links.splice(i,1); save(); render();
+    }
+
+    function exportJson(){
+      const data = JSON.stringify({ links }, null, 2);
+      const blob = new Blob([data], {type: 'application/json'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'links.json'; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    }
+
+    function importJson(file){
+      const reader = new FileReader();
+      reader.onload = () => {
+        try{
+          const json = JSON.parse(reader.result);
+          const arr = Array.isArray(json) ? json : json.links;
+          if(Array.isArray(arr)){
+            // basic shape check
+            const cleaned = arr.filter(x => x && typeof x.name === 'string' && typeof x.url === 'string')
+                               .map(x => ({ name: x.name.trim(), url: normalize(x.url.trim()) }))
+                               .filter(x => x.name && x.url);
+            if(cleaned.length){ links = cleaned; save(); render(); }
+          }
+        }catch(e){ alert('Ugyldig JSON'); }
+      };
+      reader.readAsText(file);
+    }
+
+    // Overlay helpers
+    let loadTimer = null;
+    function showOverlay(show){ overlay.classList.toggle('show', !!show); }
+
+    // Iframe load feedback
+    view.addEventListener('load', ()=>{
+      // Slå hint fra lidt efter load
+      if(loadTimer) clearTimeout(loadTimer);
+      loadTimer = setTimeout(()=> showOverlay(false), 400);
+    });
+
+    // Kontroller efter et par sekunder om visning forbliver tom (heuristik)
+    function heuristicCheck(){
+      try{
+        // Forsøg på adgang udløser fejl ved cross-origin — bruges blot som signal
+        const d = view.contentDocument; // eslint-disable-line no-unused-vars
+        // hvis adgang lykkes, antages indhold at være synligt
+        showOverlay(false);
+      }catch(e){
+        // Cross-origin — ingen sikker viden om synlighed, hold hint synligt et øjeblik
+        if(loadTimer) clearTimeout(loadTimer);
+        loadTimer = setTimeout(()=> showOverlay(true), 800);
+      }
+    }
+    setInterval(heuristicCheck, 1200);
+
+    // Wire events
+    addBtn.onclick = add;
+    searchInput.addEventListener('input', render);
+    document.getElementById('exportBtn').onclick = exportJson;
+    document.getElementById('importFile').addEventListener('change', (e)=>{
+      const file = e.target.files && e.target.files[0];
+      if(file) importJson(file);
+      e.target.value = '';
+    });
+    reloadBtn.onclick = () => { if(view.src) view.src = view.src; };
+    document.getElementById('closeOverlay').onclick = () => showOverlay(false);
+
+    // util
+    function escapeHtml(str){
+      return str.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+    }
+
+    // Init (async to support links.json)
+    (async () => {
+      await load();
+      render();
+      if(links.length) select(0);
+    })();
+  </script>
+</body>
+</html>
